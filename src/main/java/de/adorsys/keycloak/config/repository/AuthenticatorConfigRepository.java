@@ -53,6 +53,15 @@ public class AuthenticatorConfigRepository {
                 .toList();
     }
 
+    public AuthenticatorConfigRepresentation getConfigByAlias(String realmName, String alias) {
+        RealmRepresentation realmExport = realmRepository.partialExport(realmName, false, false);
+        return realmExport.getAuthenticatorConfig()
+                .stream()
+                .filter(flow -> Objects.equals(flow.getAlias(), alias))
+                .findFirst()
+                .orElse(null);
+    }
+
     public void delete(String realmName, String id) {
         AuthenticationManagementResource flowsResource = authenticationFlowRepository.getFlowResources(realmName);
         flowsResource.removeAuthenticatorConfig(id);

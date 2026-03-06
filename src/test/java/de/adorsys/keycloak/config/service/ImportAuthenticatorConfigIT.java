@@ -25,6 +25,8 @@ import de.adorsys.keycloak.config.exception.ImportProcessingException;
 import de.adorsys.keycloak.config.model.RealmImport;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
+import org.keycloak.representations.idm.AuthenticationExecutionExportRepresentation;
+import org.keycloak.representations.idm.AuthenticationFlowRepresentation;
 import org.keycloak.representations.idm.AuthenticatorConfigRepresentation;
 import org.keycloak.representations.idm.RealmRepresentation;
 
@@ -37,9 +39,10 @@ import static org.hamcrest.Matchers.*;
 import static org.hamcrest.core.Is.is;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-@SuppressWarnings({"java:S5961", "java:S5976"})
+@SuppressWarnings({ "java:S5961", "java:S5976" })
 class ImportAuthenticatorConfigIT extends AbstractImportIT {
     private static final String REALM_NAME = "realmWithAuthConfig";
+    private static final String SHARED_CONFIG_REALM_NAME = "realmWithSharedAuthConfig";
 
     ImportAuthenticatorConfigIT() {
         this.resourcePath = "import-files/auth-config";
@@ -112,7 +115,8 @@ class ImportAuthenticatorConfigIT extends AbstractImportIT {
         assertThat(updatedRealm.getRealm(), is(REALM_NAME));
         assertThat(updatedRealm.isEnabled(), is(true));
 
-        List<AuthenticatorConfigRepresentation> authConfig = getAuthenticatorConfig(updatedRealm, "other test auth config");
+        List<AuthenticatorConfigRepresentation> authConfig = getAuthenticatorConfig(updatedRealm,
+                "other test auth config");
         assertThat(authConfig, is(not(empty())));
         assertThat(authConfig, hasSize(1));
         assertThat(authConfig.get(0).getConfig().get("require.password.update.after.registration"), is("false"));
@@ -128,7 +132,8 @@ class ImportAuthenticatorConfigIT extends AbstractImportIT {
         assertThat(updatedRealm.getRealm(), is(REALM_NAME));
         assertThat(updatedRealm.isEnabled(), is(true));
 
-        List<AuthenticatorConfigRepresentation> authConfig = getAuthenticatorConfig(updatedRealm, "other test auth config");
+        List<AuthenticatorConfigRepresentation> authConfig = getAuthenticatorConfig(updatedRealm,
+                "other test auth config");
         assertThat(authConfig, is(not(empty())));
         assertThat(authConfig, hasSize(1));
         assertThat(authConfig.get(0).getConfig().get("require.password.update.after.registration"), is("true"));
@@ -144,7 +149,8 @@ class ImportAuthenticatorConfigIT extends AbstractImportIT {
         assertThat(updatedRealm.getRealm(), is(REALM_NAME));
         assertThat(updatedRealm.isEnabled(), is(true));
 
-        List<AuthenticatorConfigRepresentation> authConfig = getAuthenticatorConfig(updatedRealm, "other test auth config");
+        List<AuthenticatorConfigRepresentation> authConfig = getAuthenticatorConfig(updatedRealm,
+                "other test auth config");
         assertThat(authConfig, is(empty()));
     }
 
@@ -199,8 +205,48 @@ class ImportAuthenticatorConfigIT extends AbstractImportIT {
     void shouldThrowInvalidAuthConfig() throws IOException {
         RealmImport foundImport = getFirstImport("9_update_realm__invalid_auth_config.json");
 
-        ImportProcessingException thrown = assertThrows(ImportProcessingException.class, () -> realmImportService.doImport(foundImport));
+        ImportProcessingException thrown = assertThrows(ImportProcessingException.class,
+                () -> realmImportService.doImport(foundImport));
 
-        assertThat(thrown.getMessage(), is("Authenticator Config 'custom-recaptcha' not found. Config must be used in execution"));
+        assertThat(thrown.getMessage(),
+                is("Authenticator Config 'custom-recaptcha' not found. Config must be used in execution"));
+    }
+
+    @Test
+    @Order(10)
+    void shouldCreateRealmWithMultipleFlowsSharingSameAuthenticatorConfig() throws IOException {
+        doImport("10_create_realm_with_shared_auth_config.json");
+
+        RealmRepresentation createdRealm = keycloakProvider.getInstance().realm(SHARED_CONFIG_REALM_NAME)
+                .partialExport(true, true);
+
+        assertThat(createdRealm.getRealm(), is(SHARED_CONFIG_REALM_NAME));
+        assertThat(createdRealm.isEnabled(), is(true));
+
+        // Verify only one authenticator config exists with alias "idp-config"
+        List<AuthenticatorConfigRepresentation> authConfigs = getAuthenticatorConfig(createdRealm, "idp-config");
+        assertThat(authConfigs, hasSize(1));
+
+        // Verify the config has the expected settings
+        AuthenticatorConfigRepresentation config = authConfigs.get(0);
+        assertThat(config.getConfig().get("defaultProvider"), is("github"));
+
+        // Find both authentication flows
+        List<AuthenticationFlowRepresentation> flows = createdRealm.getAuthenticationFlows()
+                .stream()
+                .filter(f -> f.getAlias().equals("Test Flow 1") || f.getAlias().equals("Test Flow 2"))
+                .toList();
+        assertThat(flows, hasSize(2));
+
+        // Verify both executions reference the same config ID
+        String configId = config.getId();
+
+        for (AuthenticationFlowRepresentation flow : flows) {
+            List<AuthenticationExecutionExportRepresentation> executions = flow.getAuthenticationExecutions();
+            assertThat(executions, hasSize(1));
+
+            // The execution should have authenticatorConfig set to the alias
+            assertThat(executions.get(0).getAuthenticatorConfig(), is("idp-config"));
+        }
     }
 }

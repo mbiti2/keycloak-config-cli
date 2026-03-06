@@ -1,0 +1,50 @@
+{
+  "enabled": true,
+  "realm": "realmWithSharedAuthConfig",
+  "authenticationFlows": [
+    {
+      "alias": "Test Flow 1",
+      "description": "First test flow with shared authenticator config",
+      "providerId": "basic-flow",
+      "topLevel": true,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticatorConfig": "idp-config",
+          "authenticator": "identity-provider-redirector",
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "userSetupAllowed": false,
+          "autheticatorFlow": false,
+          "authenticatorFlow": false
+        }
+      ]
+    },
+    {
+      "alias": "Test Flow 2",
+      "description": "Second test flow with shared authenticator config",
+      "providerId": "basic-flow",
+      "topLevel": true,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticatorConfig": "idp-config",
+          "authenticator": "identity-provider-redirector",
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "userSetupAllowed": false,
+          "autheticatorFlow": false,
+          "authenticatorFlow": false
+        }
+      ]
+    }
+  ],
+  "authenticatorConfig": [
+    {
+      "alias": "idp-config",
+      "config": {
+        "defaultProvider": "github"
+      }
+    }
+  ]
+}
