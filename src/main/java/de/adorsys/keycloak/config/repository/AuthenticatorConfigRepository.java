@@ -33,6 +33,7 @@ import java.util.Objects;
 @Service
 @ConditionalOnProperty(prefix = "run", name = "operation", havingValue = "IMPORT", matchIfMissing = true)
 public class AuthenticatorConfigRepository {
+
     private final AuthenticationFlowRepository authenticationFlowRepository;
     private final RealmRepository realmRepository;
 
@@ -49,7 +50,7 @@ public class AuthenticatorConfigRepository {
         RealmRepresentation realmExport = realmRepository.partialExport(realmName, false, false);
         return realmExport.getAuthenticatorConfig()
                 .stream()
-                .filter(flow -> Objects.equals(flow.getAlias(), alias))
+                .filter(config -> Objects.equals(config.getAlias(), alias))
                 .toList();
     }
 
@@ -57,7 +58,7 @@ public class AuthenticatorConfigRepository {
         RealmRepresentation realmExport = realmRepository.partialExport(realmName, false, false);
         return realmExport.getAuthenticatorConfig()
                 .stream()
-                .filter(flow -> Objects.equals(flow.getAlias(), alias))
+                .filter(config -> Objects.equals(config.getAlias(), alias))
                 .findFirst()
                 .orElse(null);
     }
@@ -81,7 +82,10 @@ public class AuthenticatorConfigRepository {
             AuthenticatorConfigRepresentation authenticatorConfigRepresentation
     ) {
         AuthenticationManagementResource flowsResource = authenticationFlowRepository.getFlowResources(realmName);
-        flowsResource.updateAuthenticatorConfig(authenticatorConfigRepresentation.getId(), authenticatorConfigRepresentation);
+        flowsResource.updateAuthenticatorConfig(
+                authenticatorConfigRepresentation.getId(),
+                authenticatorConfigRepresentation
+        );
     }
 
     public List<AuthenticatorConfigRepresentation> getAll(String realmName) {

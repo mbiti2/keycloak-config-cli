@@ -37,7 +37,6 @@ import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -54,11 +53,7 @@ public class ExecutionFlowsImportService {
     private final ExecutionFlowRepository executionFlowRepository;
     private final AuthenticatorConfigRepository authenticatorConfigRepository;
     private final AuthenticationFlowRepository authenticationFlowRepository;
-
-    // Cache to track authenticatorConfig aliases that have been created and their IDs
-    // This allows multiple executions to share the same authenticatorConfig
-    private final Map<String, String> createdAuthenticatorConfigIds = new HashMap<>();
-
+   
     @Autowired
     public ExecutionFlowsImportService(
             ExecutionFlowRepository executionFlowRepository,
@@ -231,8 +226,7 @@ public class ExecutionFlowsImportService {
             );
         }
 
-        if (storedExecutionFlow.getAuthenticationConfig() == null
-                && executionToImport.getAuthenticatorConfig() != null) {
+        if (executionToImport.getAuthenticatorConfig() != null) {
             createAuthenticatorConfig(
                     realmImport,
                     executionToImport.getAuthenticatorConfig(),
@@ -320,73 +314,27 @@ public class ExecutionFlowsImportService {
             String authenticatorConfigName,
             String flowExecutionId
     ) {
-        // Check if we already created a config with this alias
-        String existingConfigId = createdAuthenticatorConfigIds.get(authenticatorConfigName);
-        if (existingConfigId != null) {
-            // Reuse existing config by updating the execution to point to it
-            updateExecutionWithExistingConfig(realmImport, flowExecutionId, existingConfigId);
-            return;
-        }
+        AuthenticatorConfigRepresentation authenticatorConfig =
+                realmImport.getAuthenticatorConfig()
+                        .stream()
+                        .filter(x -> Objects.equals(x.getAlias(), authenticatorConfigName))
+                        .findAny()
+                        .orElseThrow(() -> new ImportProcessingException(
+                                String.format(
+                                        "Authenticator config '%s' definition not found",
+                                        authenticatorConfigName)));
 
-        AuthenticatorConfigRepresentation authenticatorConfig = realmImport
-                .getAuthenticatorConfig()
-                .stream()
-                .filter(x -> Objects.equals(x.getAlias(), authenticatorConfigName))
-                .findAny()
-                .orElseThrow(() -> new ImportProcessingException(
-                        String.format("Authenticator config '%s' definition not found", authenticatorConfigName)
-                ));
+        AuthenticatorConfigRepresentation configCopy =
+                new AuthenticatorConfigRepresentation();
+
+        configCopy.setAlias(authenticatorConfig.getAlias());
+        configCopy.setConfig(authenticatorConfig.getConfig());
 
         authenticatorConfigRepository.create(
                 realmImport.getRealm(),
                 flowExecutionId,
-                authenticatorConfig
+                configCopy
         );
-
-        // Get the created config's ID and cache it for reuse
-        AuthenticatorConfigRepresentation createdConfig = authenticatorConfigRepository
-                .getConfigByAlias(realmImport.getRealm(), authenticatorConfigName);
-        if (createdConfig != null && createdConfig.getId() != null) {
-            createdAuthenticatorConfigIds.put(authenticatorConfigName, createdConfig.getId());
-        }
-    }
-
-    private void updateExecutionWithExistingConfig(
-            RealmImport realmImport,
-            String executionId,
-            String configId
-    ) {
-        // Find the execution and update it to reference the existing config
-        // This is done by finding the execution in its parent flow and updating it
-        AuthenticationExecutionInfoRepresentation executionToUpdate = null;
-        String flowAlias = null;
-
-        // Search through all flows to find the execution
-        List<AuthenticationFlowRepresentation> allFlows = authenticationFlowRepository
-                .getAll(realmImport.getRealm());
-        for (AuthenticationFlowRepresentation flow : allFlows) {
-            List<AuthenticationExecutionInfoRepresentation> executions = executionFlowRepository
-                    .getExecutionsByAuthFlow(realmImport.getRealm(), flow.getAlias());
-            for (AuthenticationExecutionInfoRepresentation exec : executions) {
-                if (Objects.equals(exec.getId(), executionId)) {
-                    executionToUpdate = exec;
-                    flowAlias = flow.getAlias();
-                    break;
-                }
-            }
-            if (executionToUpdate != null) {
-                break;
-            }
-        }
-
-        if (executionToUpdate != null && flowAlias != null) {
-            executionToUpdate.setAuthenticationConfig(configId);
-            executionFlowRepository.updateExecutionFlow(
-                    realmImport.getRealm(),
-                    flowAlias,
-                    executionToUpdate
-            );
-        }
     }
 
     private void debugLogExecutionFlowCreation(

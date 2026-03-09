@@ -1,17 +1,25 @@
 {
   "enabled": true,
   "realm": "realmWithSharedAuthConfig",
+  "authenticatorConfig": [
+    {
+      "alias": "single-otp-config",
+      "config": {
+        "otpType": "totp",
+        "digits": "6"
+      }
+    }
+  ],
   "authenticationFlows": [
     {
-      "alias": "Test Flow 1",
-      "description": "First test flow with shared authenticator config",
+      "alias": "Single Test Flow",
       "providerId": "basic-flow",
       "topLevel": true,
       "builtIn": false,
       "authenticationExecutions": [
         {
-          "authenticatorConfig": "idp-config",
-          "authenticator": "identity-provider-redirector",
+          "authenticator": "auth-otp-form",
+          "authenticatorConfig": "single-otp-config",
           "requirement": "REQUIRED",
           "priority": 10,
           "userSetupAllowed": false,
@@ -21,15 +29,14 @@
       ]
     },
     {
-      "alias": "Test Flow 2",
-      "description": "Second test flow with shared authenticator config",
+      "alias": "Second Test Flow",
       "providerId": "basic-flow",
       "topLevel": true,
       "builtIn": false,
       "authenticationExecutions": [
         {
-          "authenticatorConfig": "idp-config",
-          "authenticator": "identity-provider-redirector",
+          "authenticator": "auth-otp-form",
+          "authenticatorConfig": "single-otp-config",
           "requirement": "REQUIRED",
           "priority": 10,
           "userSetupAllowed": false,
@@ -37,14 +44,6 @@
           "authenticatorFlow": false
         }
       ]
-    }
-  ],
-  "authenticatorConfig": [
-    {
-      "alias": "idp-config",
-      "config": {
-        "defaultProvider": "github"
-      }
     }
   ]
 }
