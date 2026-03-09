@@ -92,4 +92,8 @@ public class AuthenticatorConfigRepository {
         RealmRepresentation realmExport = realmRepository.partialExport(realmName, false, false);
         return realmExport.getAuthenticatorConfig();
     }
+
+    public boolean exists(String realmName, String alias, String executionId) {
+        return !getConfigsByAlias(realmName, alias).isEmpty();
+    }
 }

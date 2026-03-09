@@ -309,6 +309,7 @@ public class ExecutionFlowsImportService {
         }
     }
 
+
     private void createAuthenticatorConfig(
             RealmImport realmImport,
             String authenticatorConfigName,
@@ -324,11 +325,17 @@ public class ExecutionFlowsImportService {
                                         "Authenticator config '%s' definition not found",
                                         authenticatorConfigName)));
 
-        AuthenticatorConfigRepresentation configCopy =
-                new AuthenticatorConfigRepresentation();
+        if (authenticatorConfigRepository.exists(realmImport.getRealm(), authenticatorConfigName, flowExecutionId)) {
+            logger.debug("Authenticator config '{}' already exists for execution '{}', reusing it",
+                    authenticatorConfigName, flowExecutionId);
+            return;
+        }
 
-        configCopy.setAlias(authenticatorConfig.getAlias());
+        AuthenticatorConfigRepresentation configCopy = new AuthenticatorConfigRepresentation();
         configCopy.setConfig(authenticatorConfig.getConfig());
+        configCopy.setAlias(authenticatorConfig.getAlias());
+
+        logger.debug("Creating authenticator config '{}' for execution '{}'", authenticatorConfig.getAlias(), flowExecutionId);
 
         authenticatorConfigRepository.create(
                 realmImport.getRealm(),
