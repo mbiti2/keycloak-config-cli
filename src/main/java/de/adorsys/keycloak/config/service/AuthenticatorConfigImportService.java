@@ -20,7 +20,6 @@
 
 package de.adorsys.keycloak.config.service;
 
-import de.adorsys.keycloak.config.exception.ImportProcessingException;
 import de.adorsys.keycloak.config.model.RealmImport;
 import de.adorsys.keycloak.config.repository.AuthenticationFlowRepository;
 import de.adorsys.keycloak.config.repository.AuthenticatorConfigRepository;
@@ -34,10 +33,10 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
-import java.util.function.Function;
-import java.util.stream.Stream;
+import java.util.Set;
 
 @Service
 @ConditionalOnProperty(prefix = "run", name = "operation", havingValue = "IMPORT", matchIfMissing = true)
@@ -103,7 +102,7 @@ public class AuthenticatorConfigImportService {
     }
 
     /**
-     * creates or updates only the top-level flow and its executions or execution-flows
+     * updates or creates the authenticator config
      */
     private void updateAuthenticatorConfig(
             RealmImport realmImport,
@@ -113,10 +112,12 @@ public class AuthenticatorConfigImportService {
                 .getConfigsByAlias(realmImport.getRealm(), authenticatorConfigRepresentation.getAlias());
 
         if (existingAuthConfigs.isEmpty()) {
-            throw new ImportProcessingException(String.format(
-                    "Authenticator Config '%s' not found. Config must be used in execution",
-                    authenticatorConfigRepresentation.getAlias()
-            ));
+            // Config doesn't exist yet - it will be created when the execution is processed
+            // This can happen when a flow with a shared config is removed and another flow
+            // using the same config is added in the same import
+            logger.debug("Authenticator config '{}' doesn't exist yet, skipping update - it will be created by execution flow import",
+                    authenticatorConfigRepresentation.getAlias());
+            return;
         }
 
         existingAuthConfigs.forEach(existingAuthConfig -> {
@@ -131,32 +132,26 @@ public class AuthenticatorConfigImportService {
             return Collections.emptyList();
         }
 
-        List<AuthenticationFlowRepresentation> authenticationFlows = mergeAuthenticationFlowsFromImportAndKeycloak(
-                realmImport, authenticationFlowsToImport
-        );
+        Set<String> usedAuthenticatorConfigIds = new HashSet<>();
+        List<AuthenticationFlowRepresentation> allRealmFlows = authenticationFlowRepository.getAll(realmImport.getRealm());
+        for (AuthenticationFlowRepresentation flow : allRealmFlows) {
+            List<AuthenticationExecutionInfoRepresentation> executions = executionFlowRepository
+                    .getExecutionsByAuthFlow(realmImport.getRealm(), flow.getAlias());
+            executions.stream()
+                    .map(AuthenticationExecutionInfoRepresentation::getAuthenticationConfig)
+                    .filter(Objects::nonNull)
+                    .forEach(usedAuthenticatorConfigIds::add);
+        }
 
-        List<AuthenticationExecutionExportRepresentation> authenticationExecutions = authenticationFlows
-                .stream()
-                .flatMap(
-                        (Function<AuthenticationFlowRepresentation, Stream<AuthenticationExecutionExportRepresentation>>) x ->
-                                x.getAuthenticationExecutions().stream()
-                )
-                .toList();
+        List<AuthenticatorConfigRepresentation> authenticatorConfigs = authenticatorConfigRepository
+                .getAll(realmImport.getRealm());
 
-        List<AuthenticatorConfigRepresentation> authenticatorConfigs = authenticatorConfigRepository.getAll(realmImport.getRealm());
-
-        List<String> authExecutionsWithAuthenticatorConfigs = authenticationExecutions
-                .stream()
-                .map(AbstractAuthenticationExecutionRepresentation::getAuthenticatorConfig)
-                .filter(Objects::nonNull)
-                .toList();
-
-        return authenticatorConfigs
-                .stream()
-                .filter(x -> !authExecutionsWithAuthenticatorConfigs.contains(x.getAlias()))
+        return authenticatorConfigs.stream()
+                .filter(config -> config.getId() != null && !usedAuthenticatorConfigIds.contains(config.getId()))
                 .toList();
     }
 
+    @SuppressWarnings("PMD.UnusedPrivateMethod")
     private List<AuthenticationFlowRepresentation> mergeAuthenticationFlowsFromImportAndKeycloak(
             RealmImport realmImport,
             List<AuthenticationFlowRepresentation> authenticationFlowsToImport

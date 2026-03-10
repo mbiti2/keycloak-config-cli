@@ -21,6 +21,8 @@
 package de.adorsys.keycloak.config.repository;
 
 import org.keycloak.admin.client.resource.AuthenticationManagementResource;
+import org.keycloak.representations.idm.AuthenticationExecutionInfoRepresentation;
+import org.keycloak.representations.idm.AuthenticationFlowRepresentation;
 import org.keycloak.representations.idm.AuthenticatorConfigRepresentation;
 import org.keycloak.representations.idm.RealmRepresentation;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -94,6 +96,27 @@ public class AuthenticatorConfigRepository {
     }
 
     public boolean exists(String realmName, String alias, String executionId) {
-        return !getConfigsByAlias(realmName, alias).isEmpty();
+        // Check if the specific execution already has ANY authenticator config
+        // We don't care about the alias here since multiple executions can share the same config alias
+        // but each execution needs its own config instance
+        return hasExecutionConfig(realmName, executionId);
+    }
+
+    /**
+     * Check if an execution already has an authenticator config associated with it.
+     */
+    private boolean hasExecutionConfig(String realmName, String executionId) {
+        AuthenticationManagementResource flowsResource = authenticationFlowRepository.getFlowResources(realmName);
+
+        // Get all flows and check each one's executions
+        for (AuthenticationFlowRepresentation flow : authenticationFlowRepository.getAll(realmName)) {
+            List<AuthenticationExecutionInfoRepresentation> executions = flowsResource.getExecutions(flow.getAlias());
+            for (AuthenticationExecutionInfoRepresentation execution : executions) {
+                if (Objects.equals(execution.getId(), executionId)) {
+                    return execution.getAuthenticationConfig() != null;
+                }
+            }
+        }
+        return false;
     }
 }
